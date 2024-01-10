@@ -87,7 +87,8 @@ class Module(core.module.Module):
         return float(g) / float(m) * 100.0
 
     def __xbacklight(self):
-        return util.cli.execute("xbacklight -get").strip()
+        b = util.cli.execute("xbacklight -get").strip()
+        return "{:3.0f}%".format(float(b))
 
     def update(self):
         try:
