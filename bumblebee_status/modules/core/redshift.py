@@ -17,6 +17,7 @@ Parameters:
 
 import re
 import threading
+import logging
 
 import core.module
 import core.widget
@@ -55,13 +56,17 @@ def get_redshift_value(module):
         res = util.cli.execute(" ".join(command))
     except Exception:
         res = ""
-    widget.set("temp", "n/a")
+    if widget.get("temp") is None:
+        widget.set("temp", "n/a")
     widget.set("transition", "")
     widget.set("state", "day")
     for line in res.split("\n"):
         line = line.lower()
-        if "temperature" in line:
-            widget.set("temp", line.split(" ")[2].upper())
+        # Only read temperature once and keep current temperature after changes
+        if "temperature" in line and widget.get("temp") == "n/a":
+            temp = line.split(" ")[2].upper()
+            widget.set("temp", temp)
+            module.current_temperature = int(temp.replace('K',''))
         if "period" in line:
             state = line.split(" ")[1]
             if "day" in state:
@@ -76,9 +81,14 @@ def get_redshift_value(module):
                 )
     core.event.trigger("update", [widget.module.id], redraw_only=True)
 
+def set_temperature(module):
+    util.cli.execute("redshift -P -O " + str(module.current_temperature), wait=False)
+    widget = module.widget()
+    widget.set("temp", str(module.current_temperature) + 'K')
+    core.event.trigger("update", [module.id], redraw_only=True)
 
 class Module(core.module.Module):
-    @core.decorators.every(seconds=10)
+    @core.decorators.every(seconds=60*30)
     def __init__(self, config, theme):
         super().__init__(config, theme, core.widget.Widget(self.text))
 
@@ -99,6 +109,22 @@ class Module(core.module.Module):
                 self.set("location", "geoclue2")
 
         self._text = ""
+        self.current_temperature = 6500
+        self.step = self.parameter("step", 250)
+
+        core.input.register(self, button=core.input.WHEEL_UP, cmd=self.increase_temperature)
+        core.input.register(self, button=core.input.WHEEL_DOWN, cmd=self.decrease_temperature)
+
+    def increase_temperature(self, event):
+        self.current_temperature += self.step
+        self.__thread = threading.Thread(target=set_temperature, args=(self,))
+        self.__thread.start()
+
+    def decrease_temperature(self, event):
+        self.current_temperature -= self.step
+        self.__thread = threading.Thread(target=set_temperature, args=(self,))
+        self.__thread.start()
+
 
     def text(self, widget):
         val = widget.get("temp", "n/a")
