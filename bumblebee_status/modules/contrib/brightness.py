@@ -27,7 +27,7 @@ import util.cli
 
 
 class Module(core.module.Module):
-    @core.decorators.every(seconds=30)
+    @core.decorators.every(seconds=10)
     def __init__(self, config, theme):
         super().__init__(config, theme, core.widget.Widget(self.brightness))
 
